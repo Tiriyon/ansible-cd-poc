@@ -1,21 +1,17 @@
+
 import os
 import time
 import requests
 import base64
 import yaml
 
-# Read file from cd/vars endoded content
 def read_vars_file(decoded_content):
-    srv = None
-    dst = None
+    vars_dict = {}
     for line in decoded_content.splitlines():
-        if line.startswith('destination_server='):
-            srv = line.split('=')[1].strip()
-        elif line.startswith('destination_path='):
-            dst = line.split('=')[1].strip()
-        if srv and dst:
-            return srv, dst
-    return None, None
+        if '=' in line:
+            key, value = line.split('=', 1)  # Split on the first '='
+            vars_dict[key.strip()] = value.strip()
+    return vars_dict
 
 def fetch_repositories(access_token, github_username):
     # Fetch repository names using GitHub API search endpoint
@@ -66,17 +62,19 @@ def main():
                 vars_content = vars_response.json()['content']
                 decoded_content = base64.b64decode(vars_content).decode('utf-8')
 
-                # Read destination server and path from decoded content
-                srv, dst = read_vars_file(decoded_content)
+                # Read variables from decoded content
+                vars_dict = read_vars_file(decoded_content)
 
-                if srv and dst:
+                if vars_dict:
+                    # Populate project information dynamically from vars_dict
                     project_info = {
                         'repo': repo_name,
                         'project': github_username,
-                        'srv': srv,
-                        'dst': dst
+                        **vars_dict  # Unpack the vars_dict into the project_info dictionary
                     }
                     projects.append(project_info)
+                else:
+                    print(f"No variables found in .cd/vars for {repo_name}.")
 
             else:
                 print(f"Could not fetch .cd/vars for {repo_name}. Status code: {vars_response.status_code}")
@@ -87,7 +85,7 @@ def main():
         time.sleep(2)  # Add a delay to avoid rate limiting
 
     # Create a YAML file
-    yaml_data = [{'repo': p['repo'], 'project': p['project'], 'srv': p['srv'], 'dst': p['dst']} for p in projects]
+    yaml_data = {'projects': projects}
     with open('projects.yaml', 'w') as yaml_file:
         yaml.dump(yaml_data, yaml_file, default_flow_style=False, sort_keys=False)
 
